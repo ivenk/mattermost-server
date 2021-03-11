@@ -1473,21 +1473,22 @@ func (s *SqlGroupStore) CountChannelMembersMinusGroupMembers(channelID string, g
 func (s *SqlGroupStore) AdminRoleGroupsForSyncableMember(userID, syncableID string, syncableType model.GroupSyncableType) ([]string, error) {
 	var groupIds []string
 
-	query := fmt.Sprintf(`
-		SELECT
-			GroupMembers.GroupId
-		FROM
-			GroupMembers
-		INNER JOIN
-			Group%[1]ss ON Group%[1]ss.GroupId = GroupMembers.GroupId
-		WHERE
-			GroupMembers.UserId = :UserId
-			AND GroupMembers.DeleteAt = 0
-			AND %[1]sId = :%[1]sId
-			AND Group%[1]ss.DeleteAt = 0
-			AND Group%[1]ss.SchemeAdmin = TRUE`, syncableType)
+	query, args, err := s.getQueryBuilder().
+		Select("*").
+		From("GroupMembers").
+		InnerJoin(fmt.Sprintf("Group%[1]ss ON Group%[1]ss.GroupId = GroupMembers.GroupId", syncableType)).
+		Where(sq.Eq{"GroupMembers.UserId": userID}).
+		Where(sq.Eq{"GroupMembers.DeleteAt": 0}).
+		Where(sq.Eq{fmt.Sprintf("%[1]sId", syncableType): syncableID}). // TODO: Double check this
+		Where(sq.Eq{fmt.Sprintf("Group%[1]ss.DeleteAt", syncableType): 0}).
+		Where(fmt.Sprintf("Group%[1]ss.SchemeAdmin = TRUE", syncableType)).
+		ToSql()
 
-	_, err := s.GetReplica().Select(&groupIds, query, map[string]interface{}{"UserId": userID, fmt.Sprintf("%sId", syncableType): syncableID})
+	if err != nil {
+		return nil, errors.Wrap(err, "admin_role_groups_for_syncable_member_tosql")
+	}
+
+	_, err = s.GetReplica().Select(&groupIds, query, args)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to find Group ids")
 	}
