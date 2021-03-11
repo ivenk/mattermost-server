@@ -43,6 +43,10 @@ type App struct {
 	context context.Context
 }
 
+type test struct {
+	awesome string
+}
+
 func New(options ...AppOption) *App {
 	app := &App{}
 
