@@ -173,7 +173,14 @@ func (s *SqlGroupStore) GetByIDs(groupIDs []string) ([]*model.Group, error) {
 
 func (s *SqlGroupStore) GetByRemoteID(remoteID string, groupSource model.GroupSource) (*model.Group, error) {
 	var group *model.Group
-	if err := s.GetReplica().SelectOne(&group, "SELECT * from UserGroups WHERE RemoteId = :RemoteId AND Source = :Source", map[string]interface{}{"RemoteId": remoteID, "Source": groupSource}); err != nil {
+
+	query, args, err := s.getQueryBuilder().Select("*").From("UserGroups").Where(sq.Eq{"RemoteId": remoteID}).Where(sq.Eq{"Source": groupSource}).ToSql()
+
+	if err != nil {
+		return nil, errors.Wrap(err, "get_by_remoteids_tosql")
+	}
+
+	if err := s.GetReplica().SelectOne(&group, query, args); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, store.NewErrNotFound("Group", fmt.Sprintf("remoteId=%s", remoteID))
 		}
@@ -186,7 +193,13 @@ func (s *SqlGroupStore) GetByRemoteID(remoteID string, groupSource model.GroupSo
 func (s *SqlGroupStore) GetAllBySource(groupSource model.GroupSource) ([]*model.Group, error) {
 	var groups []*model.Group
 
-	if _, err := s.GetReplica().Select(&groups, "SELECT * from UserGroups WHERE DeleteAt = 0 AND Source = :Source", map[string]interface{}{"Source": groupSource}); err != nil {
+	query, args, err := s.getQueryBuilder().Select("*").From("UserGroups").Where(sq.Eq{"DeleteAt": 0}).Where(sq.Eq{"Source": groupSource}).ToSql()
+
+	if err != nil {
+		return nil, errors.Wrap(err, "get_all_by_source_tosql")
+	}
+
+	if _, err := s.GetReplica().Select(&groups, query, args); err != nil {
 		return nil, errors.Wrapf(err, "failed to find Groups by groupSource=%v", groupSource)
 	}
 
