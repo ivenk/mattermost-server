@@ -115,7 +115,18 @@ func (s *SqlGroupStore) Create(group *model.Group) (*model.Group, error) {
 
 func (s *SqlGroupStore) Get(groupId string) (*model.Group, error) {
 	var group *model.Group
-	if err := s.GetReplica().SelectOne(&group, "SELECT * from UserGroups WHERE Id = :Id", map[string]interface{}{"Id": groupId}); err != nil {
+
+	query, args, err := s.getQueryBuilder().
+		Select("*").
+		From("UserGroups").
+		Where(sq.Eq{"Id": groupId}).
+		ToSql()
+
+	if err != nil {
+		return nil, errors.Wrap(err, "could not build query to get user group by id")
+	}
+
+	if err := s.GetReplica().SelectOne(&group, query, args); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, store.NewErrNotFound("Group", groupId)
 		}
