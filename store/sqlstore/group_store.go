@@ -228,7 +228,14 @@ func (s *SqlGroupStore) GetByUser(userId string) ([]*model.Group, error) {
 
 func (s *SqlGroupStore) Update(group *model.Group) (*model.Group, error) {
 	var retrievedGroup *model.Group
-	if err := s.GetReplica().SelectOne(&retrievedGroup, "SELECT * FROM UserGroups WHERE Id = :Id", map[string]interface{}{"Id": group.Id}); err != nil {
+
+	query, args, err := s.getQueryBuilder().Select("*").From("UserGroups").Where(sq.Eq{"Id": group.Id}).ToSql()
+
+	if err != nil {
+		return nil, errors.Wrap(err, "update_tosql")
+	}
+
+	if err := s.GetReplica().SelectOne(&retrievedGroup, query, args); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, store.NewErrNotFound("Group", group.Id)
 		}
@@ -264,7 +271,14 @@ func (s *SqlGroupStore) Update(group *model.Group) (*model.Group, error) {
 
 func (s *SqlGroupStore) Delete(groupID string) (*model.Group, error) {
 	var group *model.Group
-	if err := s.GetReplica().SelectOne(&group, "SELECT * from UserGroups WHERE Id = :Id AND DeleteAt = 0", map[string]interface{}{"Id": groupID}); err != nil {
+
+	query, args, err := s.getQueryBuilder().Select("*").From("UserGroups").Where(sq.Eq{"Id": groupID}).Where(sq.Eq{"DeleteAt": 0}).ToSql()
+
+	if err != nil {
+		return nil, errors.Wrap(err, "delete_tosql")
+	}
+
+	if err := s.GetReplica().SelectOne(&group, query, args); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, store.NewErrNotFound("Group", groupID)
 		}
@@ -425,12 +439,26 @@ func (s *SqlGroupStore) UpsertMember(groupID string, userID string) (*model.Grou
 	}
 
 	var retrievedGroup *model.Group
-	if err := s.GetReplica().SelectOne(&retrievedGroup, "SELECT * FROM UserGroups WHERE Id = :Id", map[string]interface{}{"Id": groupID}); err != nil {
+
+	query, args, err := s.getQueryBuilder().Select("*").From("UserGroups").Where(sq.Eq{"Id": groupID}).ToSql()
+
+	if err != nil {
+		return nil, errors.Wrap(err, "upsert_member_group_tosql")
+	}
+
+	if err := s.GetReplica().SelectOne(&retrievedGroup, query, args); err != nil {
 		return nil, errors.Wrapf(err, "failed to get UserGroup with groupId=%s and userId=%s", groupID, userID)
 	}
 
 	var retrievedMember *model.GroupMember
-	if err := s.GetReplica().SelectOne(&retrievedMember, "SELECT * FROM GroupMembers WHERE GroupId = :GroupId AND UserId = :UserId", map[string]interface{}{"GroupId": member.GroupId, "UserId": member.UserId}); err != nil {
+
+	query, args, err = s.getQueryBuilder().Select("*").From("GroupMembers").Where(sq.Eq{"GroupId": member.GroupId}).Where(sq.Eq{"UserId": member.UserId}).ToSql()
+
+	if err != nil {
+		return nil, errors.Wrap(err, "upsert_member_group_userid_tosql")
+	}
+
+	if err := s.GetReplica().SelectOne(&retrievedMember, query, args); err != nil {
 		if err != sql.ErrNoRows {
 			return nil, errors.Wrapf(err, "failed to get GroupMember with groupId=%s and userId=%s", groupID, userID)
 		}
@@ -477,7 +505,14 @@ func (s *SqlGroupStore) DeleteMember(groupID string, userID string) (*model.Grou
 }
 
 func (s *SqlGroupStore) PermanentDeleteMembersByUser(userId string) error {
-	if _, err := s.GetMaster().Exec("DELETE FROM GroupMembers WHERE UserId = :UserId", map[string]interface{}{"UserId": userId}); err != nil {
+
+	query, args, err := s.getQueryBuilder().Delete("GroupMembers").Where(sq.Eq{"UserId": userId}).ToSql()
+
+	if err != nil {
+		return errors.Wrap(err, "permanent_delete_members_by_user_tosql")
+	}
+
+	if _, err := s.GetMaster().Exec(query, args); err != nil {
 		return errors.Wrapf(err, "failed to permanent delete GroupMember with userId=%s", userId)
 	}
 	return nil
